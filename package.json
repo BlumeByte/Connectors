@@ -1,0 +1,1 @@
+{"name":"connectors","version":"0.1.0","private":true,"scripts":{"start":"node server.mjs","check":"node --check dist/app.js && node --check server.mjs"}}
