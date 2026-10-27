@@ -2,6 +2,8 @@ import http from 'node:http';
 import {readFile,mkdir,writeFile,rename} from 'node:fs/promises';
 import {randomUUID,createHash} from 'node:crypto';
 import {allowedRequest,buildInputs} from './publishing.mjs';
+import {uploadSignature} from './cloudinary.mjs';
+let cloudConfig=null;
 const port=4173,files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/connect.js':'connect.js','/style.css':'style.css'};
 const stateDir=new URL('./.local/',import.meta.url),receiptFile=new URL('receipts.json',stateDir);
 let apiKey=process.env.BUFFER_API_KEY||'',channels=[],busy=false,receipts=[];
@@ -21,7 +23,12 @@ http.createServer(async(req,res)=>{
  if(!allowedRequest(req.headers,req.method,port))return json(res,403,{error:'Only requests from the local Connectors page are allowed.'});
  const path=new URL(req.url,'http://localhost').pathname;
  try{
- if(path==='/api/status'&&req.method==='GET')return json(res,200,{connected:!!apiKey,channels,receipts});
+ if(path==='/api/status'&&req.method==='GET')return json(res,200,{connected:!!apiKey,channels,receipts,cloudinary:cloudConfig?{configured:true,cloud:cloudConfig.cloud}:{configured:false}});
+ if(path==='/api/cloudinary/connect'&&req.method==='POST'){
+ const input=await body(req);const config={cloud:String(input.cloud||'').trim(),key:String(input.key||'').trim(),secret:String(input.secret||'').trim()};
+ uploadSignature(config,{type:'image/png',size:1});cloudConfig=config;return json(res,200,{configured:true,cloud:config.cloud});}
+ if(path==='/api/cloudinary/disconnect'&&req.method==='POST'){cloudConfig=null;return json(res,200,{configured:false});}
+ if(path==='/api/cloudinary/sign'&&req.method==='POST'){if(!apiKey)throw Error('Connect Buffer before uploading a post.');return json(res,200,uploadSignature(cloudConfig,await body(req)));}
  if(path==='/api/connect'&&req.method==='POST'){
  if(busy)throw Error('Wait for the current publish request to finish.');const input=await body(req);if(typeof input.key!=='string'||!input.key.trim()||input.key.length>4096)throw Error('Enter your Buffer API key.');
  const next=await loadChannels(input.key.trim());apiKey=input.key.trim();channels=next;return json(res,200,{connected:true,channels});}
